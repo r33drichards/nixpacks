@@ -20,6 +20,12 @@ use std::{
     string::ToString,
 };
 
+use ssh2::Session;
+use std::fs::File;
+use std::io::Write;
+use std::net::TcpStream;
+use std::path::Path;
+
 /// The build plan config file format to use.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum PlanFormat {
@@ -87,9 +93,8 @@ enum Commands {
     Devenv {
         /// App source
         path: String,
-
+        hostname: String,
     },
-
 
     /// List all of the providers that will be used to build the app
     Detect {
@@ -222,13 +227,35 @@ async fn main() -> Result<()> {
             println!("{plan_s}");
         }
 
-        Commands::Devenv { path } => {
+        Commands::Devenv { path, hostname } => {
             let plan = generate_build_plan(&path, env, &options)?;
             // let plan_s = plan.to_json()?;
             let packages = plan.get_packages();
             let home_manager_config = to_home_manager_nix(packages);
             // print home manager config
-            print!("{home_manager_config}")
+            print!("{home_manager_config}");
+            let tcp = TcpStream::connect(hostname+":22").unwrap();
+            let mut sess = Session::new().unwrap();
+                // Use the TCP stream to start an SSH session
+            sess.set_tcp_stream(tcp);
+            sess.handshake().unwrap();
+
+            // Authenticate using a private key
+            let key_path = Path::new("/Users/robertwendt/.ssh/nixos");
+            // let mut private_key = File::open(&key_path).unwrap();
+            sess.userauth_pubkey_file("ubuntu", None, key_path, None).unwrap();
+            assert!(sess.authenticated());
+                // Open an SFTP session
+            let mut sftp = sess.sftp().unwrap();
+
+            // Open the remote file in write mode
+            let remote_file_path = Path::new("/home/ubuntu/.config/home-manager/home.nix");
+            let mut remote_file = sess.scp_send(remote_file_path,
+!                                     0o644, 10, None).unwrap();
+
+            // Write your string data to the file
+            remote_file.write_all( home_manager_config.as_bytes()).unwrap();
+            print!("success");
         }
 
 
