@@ -60,6 +60,21 @@ impl BuildPlan {
         }
     }
 
+    pub fn get_packages(&self) -> Vec<String> {
+        let mut pkgs = Vec::new();
+        if let Some(phases) = &self.phases {
+            for (_, phase) in phases {
+                if let Some(nixpkgs) = &phase.nix_pkgs {
+                    pkgs.extend(nixpkgs.iter().map(|p| p.to_string()));
+                }
+                if let Some(apt) = &phase.apt_pkgs {
+                    pkgs.extend(apt.iter().map(|p| p.to_string()));
+                }
+            }
+        }
+        pkgs
+    }
+
     /// Create a BuildPlan from a toml config file.
     pub fn from_toml<S: Into<String>>(toml: S) -> Result<Self> {
         let mut plan: BuildPlan = toml::from_str(&toml.into())?;

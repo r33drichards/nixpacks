@@ -84,6 +84,12 @@ enum Commands {
         #[arg(short, long, value_enum, default_value = "json")]
         format: PlanFormat,
     },
+    Devenv {
+        /// App source
+        path: String,
+
+    },
+
 
     /// List all of the providers that will be used to build the app
     Detect {
@@ -215,6 +221,17 @@ async fn main() -> Result<()> {
 
             println!("{plan_s}");
         }
+
+        Commands::Devenv { path } => {
+            let plan = generate_build_plan(&path, env, &options)?;
+            // let plan_s = plan.to_json()?;
+            let packages = plan.get_packages();
+            let home_manager_config = to_home_manager_nix(packages);
+            // print home manager config
+            print!("{home_manager_config}")
+        }
+
+
         // Detect which providers should be used to build a project and print them to stdout.
         Commands::Detect { path } => {
             let providers = get_plan_providers(&path, env, &options)?;
@@ -287,4 +304,39 @@ fn get_default_cache_key(path: &str) -> Result<Option<String>> {
     } else {
         Ok(None)
     }
+}
+
+
+
+
+fn to_home_manager_nix(packages: Vec<String>) -> String {
+    let mut text = "
+    { config, pkgs, lib, ... }:
+
+    {
+      # Home Manager needs a bit of information about you and the paths it should
+      # manage.
+      home.username = \"ubuntu\";
+      home.homeDirectory = \"/home/ubuntu\";
+    
+      # This value determines the Home Manager release that your configuration is
+      # compatible with. This helps avoid breakage when a new Home Manager release
+      # introduces backwards incompatible changes.
+      #
+      # You should not change this value, even if you update Home Manager. If you do
+      # want to update the value, then make sure to first check the Home Manager
+      # release notes.
+      home.stateVersion = \"23.05\"; # Please read the comment before changing.
+    
+      # The home.packages option allows you to install Nix packages into your
+      # environment.
+      home.packages = with pkgs; [ 
+".to_string();
+    for package in &packages {
+        // append pkgs.package to text 
+        text = format!("{}        {} \n", text, package);
+    }
+    text.push_str("    ];\n};\n");
+
+    return text;
 }
