@@ -27,6 +27,7 @@
             };
             # For tooling like rust-analyzer
             RUST_SRC_PATH = "${rustPlatform.rustLibSrc}";
+            RUST_BACKTRACE=1;
             doCheck = false;
             meta = with nixpkgs.lib; {
               description = "App source + Nix packages + Docker = Image";
