@@ -343,7 +343,16 @@ fn get_default_cache_key(path: &str) -> Result<Option<String>> {
 
 fn to_home_manager_nix(packages: Vec<String>) -> String {
     // filter npm from packages 
-    let packages = packages.into_iter().filter(|p| !p.contains("npm")).collect::<Vec<_>>();
+    let packages = packages.into_iter().filter(|p| !p.starts_with("npm")).collect::<Vec<_>>();
+    // if yarn_* replace with yarn
+    let packages = packages.into_iter().map(
+        |p| {
+            if p.starts_with("yarn-") {
+                return "yarn".to_string();
+            }
+            return p;
+        }
+    ).collect::<Vec<_>>();
     let mut text = "
     { config, pkgs, lib, ... }:
 
