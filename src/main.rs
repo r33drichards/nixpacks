@@ -17,7 +17,7 @@ use std::{
     env,
     hash::{Hash, Hasher},
     ops::Deref,
-    string::ToString,
+    string::ToString, io::Read,
 };
 
 use ssh2::Session;
@@ -234,6 +234,9 @@ async fn main() -> Result<()> {
             let home_manager_config = to_home_manager_nix(packages);
             // print home manager config
             print!("{home_manager_config}");
+            // upload home_manager_config to remote host
+            print!("uploading home manager config to remote host");
+
             let tcp = TcpStream::connect(hostname+":22").unwrap();
             let mut sess = Session::new().unwrap();
                 // Use the TCP stream to start an SSH session
@@ -245,17 +248,22 @@ async fn main() -> Result<()> {
             // let mut private_key = File::open(&key_path).unwrap();
             sess.userauth_pubkey_file("ubuntu", None, key_path, None).unwrap();
             assert!(sess.authenticated());
-                // Open an SFTP session
-            let mut sftp = sess.sftp().unwrap();
 
-            // Open the remote file in write mode
-            let remote_file_path = Path::new("/home/ubuntu/.config/home-manager/home.nix");
-            let mut remote_file = sess.scp_send(remote_file_path,
-!                                     0o644, 10, None).unwrap();
+            let mut f = sess.scp_send(Path::new("/home/ubuntu/.config/home-manager/home.nix"), 0o644, home_manager_config.clone().as_bytes().len() as u64, None).unwrap();
+            
+            f.write_all(home_manager_config.clone().as_bytes()).unwrap();
+            
+            print!("uploaded home manager config to remote host");
 
-            // Write your string data to the file
-            remote_file.write_all( home_manager_config.as_bytes()).unwrap();
-            print!("success");
+            print!("run home manager switch on remote host");
+            let mut channel = sess.channel_session().unwrap();
+            channel.exec("nix-shell '<home-manager>' -A install").unwrap();
+            let mut s = String::new();
+            channel.read_to_string(&mut s).unwrap();
+            print!("{}", s);
+            channel.wait_close().unwrap();
+            print!("home manager switch done");
+
         }
 
 
@@ -333,10 +341,9 @@ fn get_default_cache_key(path: &str) -> Result<Option<String>> {
     }
 }
 
-
-
-
 fn to_home_manager_nix(packages: Vec<String>) -> String {
+    // filter npm from packages 
+    let packages = packages.into_iter().filter(|p| !p.contains("npm")).collect::<Vec<_>>();
     let mut text = "
     { config, pkgs, lib, ... }:
 
@@ -363,7 +370,7 @@ fn to_home_manager_nix(packages: Vec<String>) -> String {
         // append pkgs.package to text 
         text = format!("{}        {} \n", text, package);
     }
-    text.push_str("    ];\n};\n");
+    text.push_str("    ];\n}\n");
 
     return text;
 }
