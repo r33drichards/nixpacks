@@ -17,7 +17,7 @@ use std::{
     env,
     hash::{Hash, Hasher},
     ops::Deref,
-    string::ToString, io::Read,
+    string::ToString, io::Read, 
 };
 
 use ssh2::Session;
@@ -25,6 +25,8 @@ use std::fs::File;
 use std::io::Write;
 use std::net::TcpStream;
 use std::path::Path;
+use git2::Repository;
+use std::error::Error;
 
 /// The build plan config file format to use.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -246,8 +248,9 @@ async fn main() -> Result<()> {
             // Authenticate using a private key
             let key_path = Path::new("/Users/robertwendt/.ssh/nixos");
             // let mut private_key = File::open(&key_path).unwrap();
-            sess.userauth_pubkey_file("ubuntu", None, key_path, None).unwrap();
+            sess.userauth_pubkey_file("root", None, key_path, None).unwrap();
             assert!(sess.authenticated());
+ 
 
             let mut f = sess.scp_send(Path::new("/home/ubuntu/.config/home-manager/home.nix"), 0o644, home_manager_config.clone().as_bytes().len() as u64, None).unwrap();
             
@@ -263,6 +266,41 @@ async fn main() -> Result<()> {
             print!("{}", s);
             channel.wait_close().unwrap();
             print!("home manager switch done");
+
+            // copy key_path to remote host
+            print!("uploading private key to remote host");
+            // read private key into string
+            let mut private_key = String::new();
+            File::open(&key_path).unwrap().read_to_string(&mut private_key).unwrap();
+            let mut f = sess.scp_send(Path::new("/home/ubuntu/.ssh/id_rsa"), 0o644, private_key.as_bytes().len() as u64, None).unwrap();
+            f.write_all(private_key.as_bytes()).unwrap();
+            print!("uploaded private key to remote host");
+
+            //  if path is a git repo, upload it to remote host
+            let path = Path::new(&path);
+            if !is_git_repo(path.clone()) {
+                print!("path is not a git repo");
+                print!("uploading path to remote host");
+
+                // create a tar gz of path
+                // let mut tar_gz = tar::Builder::new(Vec::new());
+                // tar_gz.append_dir_all(path.file_name(), &path).unwrap();
+                return Ok(());
+            }
+
+            // get git remote url
+            let git_remote_url = get_git_remote_url(&Path::new(&path)).unwrap();
+            print!("git remote url: {}", git_remote_url);
+
+            // clone git repo on remote host
+            print!("cloning git repo on remote host");
+            let mut channel = sess.channel_session().unwrap();
+            channel.exec(format!("git clone {}", git_remote_url).as_str()).unwrap();
+            let mut s = String::new();
+            channel.read_to_string(&mut s).unwrap();
+            print!("{}", s);
+            channel.wait_close().unwrap();
+            print!("cloned git repo on remote host");
 
         }
 
@@ -340,6 +378,24 @@ fn get_default_cache_key(path: &str) -> Result<Option<String>> {
         Ok(None)
     }
 }
+
+
+fn is_git_repo(path: &Path) -> bool {
+    let git_path = path.join(".git");
+    return git_path.exists();
+}
+
+fn get_git_remote_url(path: &Path) -> Result<String, Box<dyn Error>> {
+    // Open the repository
+    let repo = Repository::open(path)?;
+
+    // Get the remote called "origin"
+    let remote = repo.find_remote("origin")?;
+
+    // Get the URL of the remote
+    Ok(remote.url().unwrap_or_default().to_string())
+}
+
 
 fn to_home_manager_nix(packages: Vec<String>) -> String {
     // filter npm from packages 

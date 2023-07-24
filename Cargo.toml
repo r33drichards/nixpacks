@@ -60,6 +60,8 @@ async-trait = "0.1.59"
 semver = "1.0.14"
 node-semver = "2.1.0"
 ssh2 = "0.9"
+git2 = "0.13.17"
+
 
 [dev-dependencies]
 dotenv-parser = "0.1.3"

@@ -22,6 +22,12 @@
             pname = "nixpacks";
             version = "1.11.0";
             src = ./.;
+            buildInputs = [ 
+              pkgs.libgit2 
+              pkgs.git    
+               pkgs.openssl 
+               pkgs.darwin.apple_sdk.frameworks.Security 
+               ];
             cargoLock = {
               lockFile = ./Cargo.lock;
             };
