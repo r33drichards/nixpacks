@@ -22,6 +22,9 @@
             pname = "nixpacks";
             version = "1.11.0";
             src = ./.;
+            buildInputs = [
+              pkgs.openssl
+            ];
             cargoLock = {
               lockFile = ./Cargo.lock;
             };
